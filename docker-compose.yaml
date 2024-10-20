@@ -1,0 +1,234 @@
+# Base structure for OR-Tools Solvers replicas
+x-or-tools-base: &or-tools-base
+  build:
+    context: ./OR-Tools
+    dockerfile: Dockerfile
+  volumes:
+    - ./OR-Tools/logs/:/app/logs/
+  restart: always
+  depends_on:
+    - kafka
+
+services:
+  # Nginx Reverse Proxy
+  nginx:
+    build:
+      context: ./Nginx
+      dockerfile: Dockerfile
+    container_name: nginx
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./Nginx/ssl/cert.pem:/etc/nginx/ssl/cert.pem
+      - ./Nginx/ssl/key.pem:/etc/nginx/ssl/key.pem
+      - ./Nginx/ssl/cert.pem:/etc/nginx/ssl/certdom.pem
+      # volumes below are needed only for the let's encrypt certificate in the VM on Oceanos
+      # - ./data/certbot/letsencrypt:/etc/letsencrypt 
+      # - ./data/certbot/www:/var/www/certbot
+      # - ./data/certbot/www:/tmp/letsencrypt
+    restart: always
+
+  # Kafka Broker (Choreographer)
+  kafka:
+    build:
+      context: ./Kafka
+      dockerfile: Dockerfile
+    container_name: kafka
+    hostname: kafka
+    environment:
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_LISTENERS: 'INTERNAL://kafka:29092,CONTROLLER://kafka:29093,EXTERNAL://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNAL://kafka:29092,EXTERNAL://localhost:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'INTERNAL'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      CLUSTER_ID: 'ciWo7IWazngRchmPES6q5A=='
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      KAFKA_LOG_RETENTION_MS: 600000
+    ports:
+      - "9092:9092"
+    volumes:
+      - ./Kafka/data:/tmp/kraft-combined-logs
+    restart: always
+
+  ### Databases
+
+  # Problems Database - MongoDB
+  problems-database:
+    build:
+      context: ./ProblemsDatabase
+      dockerfile: Dockerfile
+    container_name: problems-database
+    ports:
+      - 27017:27017
+    volumes:
+      - ./ProblemsDatabase/db:/data/db
+    restart: always
+
+  # Users Database - MongoDB
+  users-database:
+    build:
+      context: ./UsersDatabase
+      dockerfile: Dockerfile
+    container_name: users-database
+    ports:
+      - 27018:27017
+    volumes:
+      - ./UsersDatabase/db:/data/db
+    restart: always
+
+  # Solvers' Orchestrator Cache - Redis
+  redis:
+    build:
+      context: ./Redis
+      dockerfile: Dockerfile
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./Redis/data:/data
+    restart: always
+
+  ### Users Related Microservices
+
+  # User Management Microservice (NodeJS)
+  user-management:
+    build:
+      context: ./UserManagement
+      dockerfile: Dockerfile
+    container_name: user-management
+    # ports:
+    #   - "9000:9000"
+    restart: always
+    depends_on:
+      - kafka
+      - users-database
+
+  # Credit Management Microservice (NodeJS)
+  credit-management:
+    build:
+      context: ./CreditManagement
+      dockerfile: Dockerfile
+    container_name: credit-management
+    # ports:
+    #   - "9001:9000"
+    restart: always
+    depends_on:
+      - kafka
+      - users-database
+
+  # Transaction Management Microservice (NodeJS)
+  transaction-management:
+    build:
+      context: ./TransactionManagement
+      dockerfile: Dockerfile
+    container_name: transaction-management
+    # ports:
+    #   - "9002:9000"
+    restart: always
+    depends_on:
+      - kafka
+      - users-database
+
+  ### Problems Related Microservices
+
+  # Model Management Microservice (NodeJS)
+  model-management:
+    build:
+      context: ./ModelManagement
+      dockerfile: Dockerfile
+    container_name: model-management
+    # ports:
+    #   - "9003:9000"
+    restart: always
+    depends_on:
+      - problems-database
+
+  # Display Problems Microservice (NodeJS)
+  display-problem:
+    build:
+      context: ./DisplayProblem
+      dockerfile: Dockerfile
+    container_name: display-problem
+    # ports:
+    #   - "9004:9000"
+    restart: always
+    depends_on:
+      - kafka
+      - problems-database
+
+  # Create Problem Microservice (NodeJS)
+  create-problem:
+    build:
+      context: ./CreateProblem
+      dockerfile: Dockerfile
+    container_name: create-problem
+    # ports:
+    #   - "9005:9000"
+    restart: always
+    depends_on:
+      - kafka
+      - problems-database
+
+  # Solver Message Handler Microservice (NodeJS)
+  solver-message-handler:
+    build:
+      context: ./SolverMessageHandler
+      dockerfile: Dockerfile
+    container_name: solver-message-handler
+    # ports:
+    #   - "9006:9000"
+    restart: always
+    depends_on:
+      - kafka
+      - problems-database
+
+  # Frontend Microservice (NextJS)
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    # ports:
+    #   - "3000:3000"
+    restart: always
+
+  ### Solver Related Microservices
+
+  # OR-Tools' Solvers Orchestrator Microservice (Python)
+  solvers-orchestrator:
+    build:
+      context: ./SolversOrchestrator
+      dockerfile: Dockerfile
+    container_name: solvers-orchestrator
+    # ports:
+    #   - "9007:9000"
+    volumes:
+      - ./SolversOrchestrator/logs/:/app/logs/
+    restart: always
+    depends_on:
+      - kafka
+      - redis
+
+  # OR-Tools Microservice (Python) (3 replicas)
+  or-tools-1:
+    <<: *or-tools-base
+    container_name: or-tools-1
+    environment:
+      SOLVER_ID: 1
+  or-tools-2:
+    <<: *or-tools-base
+    container_name: or-tools-2
+    environment:
+      SOLVER_ID: 2
+  or-tools-3:
+    <<: *or-tools-base
+    container_name: or-tools-3
+    environment:
+      SOLVER_ID: 3

@@ -1,0 +1,5 @@
+FROM confluentinc/cp-kafka:7.7.0
+
+EXPOSE 9092
+EXPOSE 29092
+EXPOSE 29093

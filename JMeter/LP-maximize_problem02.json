@@ -1,0 +1,24 @@
+{
+  "type": "max",
+  "objective": "8 * xPA + 8 * xMA + 8 * xSA + 7 * xPB + 7 * xMB + 7 * xSB",
+  "constraints": [
+    "xPA + xPB <= 2000",
+    "60 * xPA + 50 * xPB <= 100000",
+    "xMA + xMB <= 3000",
+    "60 * xMA + 50 * xMB <= 160000",
+    "xSA + xSB <= 1700",
+    "60 * xSA + 50 * xSB <= 60000",
+    "xPA + xPB - 1.3 * xSA - 1.3 * xSB = 0",
+    "1.3 * xPA + 1.3 * xPB - xMA - xMB <= 0",
+    "- xMA - xMB + 1.3 * xSA + 1.3 * xSB <= 0",
+    "- 0.9 * xPA - 0.9 * xPB + 0.1 * xMA + 0.1 * xMB - 0.9 * xSA - 0.9 * xSB <= 0",
+    "xPA + xMA + 1 * xSA <=    5000",
+    "xPB + xMB + xSB <= 3000",
+    "xPA >= 0",
+    "xMA >= 0",
+    "xSA >= 0",
+    "xPB >= 0",
+    "xMB >= 0",
+    "xSB >= 0"
+  ]
+}
